@@ -79,7 +79,8 @@ class UR_MON:
     def monitor_start(self):
         while True:
             t_start = self.rtde_r.initPeriod()
-            actual_tcp_pose = self.rtde_r.getActualTCPPose()
+#            actual_tcp_pose = self.rtde_r.getActualTCPPose()
+            actual_tcp_pose = self.rtde_r.getActualQ()
             self.client.publish("UR5e/state", json.dumps(actual_tcp_pose))
             # ここで SharedMemory を使う！
 
@@ -96,7 +97,10 @@ class UR_MON:
         self.init_realtime()
         self.init_rtde()
         self.connect_mqtt()
-        self.monitor_start()
+        try:
+            self.monitor_start()
+        except KeyboardInterrupt:
+            print("Stop! UR monitor")
 
 if __name__ == '__main__':
     verbose = False

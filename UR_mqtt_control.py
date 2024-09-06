@@ -1,6 +1,3 @@
-import rtde_control
-from rtde_control import RTDEControlInterface as RTDEControl
-from rtde_receive import RTDEReceiveInterface as RTDEReceive
 
 import json
 from paho.mqtt import client as mqtt
@@ -18,6 +15,7 @@ import numpy as np
 import time
 
 import UR_monitor
+import UR_control
 
 
 #
@@ -39,35 +37,12 @@ import UR_monitor
 
 """
 
-
-
-
-
-robot_ip = "127.0.0.1"
-rtde_frequency = 500.0
-dt = 1.0/rtde_frequency  # 2ms
-flags = RTDEControl.FLAG_VERBOSE | RTDEControl.FLAG_UPLOAD_SCRIPT
-ur_cap_port = 50002
-
-# Parameters
-velocity = 0.5
-acceleration = 0.5
-dt = 1.0/500  # 2ms
-lookahead_time = 0.1
-gain = 300
-
-rt_control_priority = 85
-
 joints=['j1','j2','j3','j4','j5','j6']
 
 class UR_MQTT:
     def __init__(self):
         self.start = -1
  #       self.log = open(fname,"w")
-
-    def init_rtde(self):
-        self.rtde_c = RTDEControl(robot_ip, rtde_frequency, flags, ur_cap_port, rt_control_priority)
-
 
     def on_connect(self,client, userdata, flag, rc):
         print("Connected with result code " + str(rc))  # 接続できた旨表示
@@ -87,7 +62,7 @@ class UR_MQTT:
                  self.start = 0
                  print("Start controlling!")
             elif self.start < 0:
-                 print("Waiting...for A button")
+                 #print("Waiting...for A button")
                  return
 
             if self.start > 100 and js['a']==True:
@@ -109,10 +84,7 @@ class UR_MQTT:
         joint_q = [math.radians(x) for x in rot2]
         # このjoint 情報も Shared Memoryに保存すべし！
         self.pose[6:] = joint_q 
-
-        t_start = self.rtde_c.initPeriod()
-        self.rtde_c.servoJ(joint_q, velocity, acceleration, dt, lookahead_time, gain)
-        self.rtde_c.waitPeriod(t_start)
+        # Target 情報を保存するだけ
 
 
     def connect_mqtt(self):
@@ -129,7 +101,7 @@ class UR_MQTT:
     def run_proc(self):
         self.sm = mp.shared_memory.SharedMemory("UR5e")
         self.pose = np.ndarray((12,), dtype=np.dtype("float32"), buffer=self.sm.buf)
-        self.init_rtde()
+
         self.connect_mqtt()
 
 class ProcessManager:
@@ -141,27 +113,29 @@ class ProcessManager:
 
     def startRecvMQTT(self):
         self.recv = UR_MQTT()
-        self.recvP = Process(target=self.recv.run_proc, args=())
+        self.recvP = Process(target=self.recv.run_proc, args=(),name="MQTT-recv")
         self.recvP.start()
 
     def startMonitor(self):
         self.mon = UR_monitor.UR_MON()
-        self.monP = Process(target=self.mon.run_proc, args=())
+        self.monP = Process(target=self.mon.run_proc, args=(),name="UR-monitor")
         self.monP.start()
+
+    def startControl(self):
+        self.ctrl = UR_control.UR_CON()
+        self.ctrlP = Process(target=self.ctrl.run_proc, args=(),name="UR-control")
+        self.ctrlP.start()
 
     def checkSM(self):
         while True:
-            print(time.time(), self.ar)
+            diff = self.ar[6:]-self.ar[:6]
+            diff *=1000
+            diff = diff.astype('int')
+            print(self.ar[:6],self.ar[6:])
+            print(diff)
             time.sleep(2)
     
                                 
-
-
-# Move to initial joint position with a regular moveJ
-#rtde_c.moveJ(joint_q)
-
-# Execute 500Hz control loop for 2 seconds, each cycle is 2ms
-
 
 if __name__ == '__main__':
 #        
@@ -171,9 +145,11 @@ if __name__ == '__main__':
         pm.startMonitor()
         print("MQTT!")
         pm.startRecvMQTT()
+        print("Control")
+        pm.startControl()
         print("Check!")
         pm.checkSM()
     except KeyboardInterrupt:
         print("Stop!")
-        rtde_c.servoStop()
-        rtde_c.stopScript()
+        #rtde_c.servoStop()
+        #rtde_c.stopScript()
