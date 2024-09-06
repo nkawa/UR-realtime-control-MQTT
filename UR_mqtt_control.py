@@ -1,13 +1,53 @@
 import rtde_control
+from rtde_control import RTDEControlInterface as RTDEControl
+from rtde_receive import RTDEReceiveInterface as RTDEReceive
+
 import json
 from paho.mqtt import client as mqtt
+import multiprocessing as mp
+import multiprocessing.shared_memory
+
+
+from multiprocessing import Process, Queue
+
 import sys
 import os
 from datetime import datetime
 import math
+import numpy as np
+import time
+
+import UR_monitor
 
 
-rtde_c = rtde_control.RTDEControlInterface("127.0.0.1")
+#
+#  RTDE : UR-5e を動かすためのリアルタイム通信
+#
+#　MQTT ： Joint、もしくは ツール位置を受信する
+#
+#　　
+
+"""
+   メンテナンスフリーにするためには、 RTDE側の状況を見守る必要がある。
+
+  安定した実行のため、マルチプロセスを使う
+    1. VRゴーグルからMQTT を受信するプロセス（目標値） 2 との間でQueue を利用
+    2. RTDE経由でURを制御するプロセス（制御値）2との間で Queue, 3 との間で SharedMemory
+    3. UR をモニタリングするプロセス
+    　　→常に最新情報を提示　（SharedMemoryを利用）
+
+
+"""
+
+
+
+
+
+robot_ip = "127.0.0.1"
+rtde_frequency = 500.0
+dt = 1.0/rtde_frequency  # 2ms
+flags = RTDEControl.FLAG_VERBOSE | RTDEControl.FLAG_UPLOAD_SCRIPT
+ur_cap_port = 50002
 
 # Parameters
 velocity = 0.5
@@ -15,14 +55,19 @@ acceleration = 0.5
 dt = 1.0/500  # 2ms
 lookahead_time = 0.1
 gain = 300
-#joint_q = [-1.54, -1.83, -2.28, -0.59, 1.60, 0.023]
+
+rt_control_priority = 85
 
 joints=['j1','j2','j3','j4','j5','j6']
 
 class UR_MQTT:
-    def __init__(self,fname):
+    def __init__(self):
         self.start = -1
-        self.log = open(fname,"w")
+ #       self.log = open(fname,"w")
+
+    def init_rtde(self):
+        self.rtde_c = RTDEControl(robot_ip, rtde_frequency, flags, ur_cap_port, rt_control_priority)
+
 
     def on_connect(self,client, userdata, flag, rc):
         print("Connected with result code " + str(rc))  # 接続できた旨表示
@@ -40,42 +85,38 @@ class UR_MQTT:
         try:
             if js['a']== True:
                  self.start = 0
+                 print("Start controlling!")
             elif self.start < 0:
-                 print("Waiting...")
+                 print("Waiting...for A button")
                  return
 
             if self.start > 100 and js['a']==True:
-                self.client.disconnect()
-                self.log.close()
+                self.start = -1
                 return
         except KeyError:
             print("No abutton")
             print(js)
 
         self.start +=1
-        # 一定時間動作したら、abutton で停止
-#        print("rot:",js)
-#        rot = [int(float(x)*10)  for x in js['rotate']]        
-##        rot = [math.radians(x)  for x in js['rotate']]
+
         rot =[js[x]  for x in joints]    
         rot2 = [rot[0],-rot[1]-90,-rot[2],-rot[3]-90,rot[4],rot[5]]
-#        rot = [math.radians(x)  for x in js['rotate']]        
-        print("rot :",rot)
-        print("rot2:",rot2)
-
-        real_joints = []
 
 # 時刻
-        ctime = datetime.now().strftime("%Y/%m/%d %H:%M:%S.%f")
-        self.log.write(json.dumps({"time":ctime, "recv":rot, "real":real_joints})+"\n")
+#        ctime = datetime.now().strftime("%Y/%m/%d %H:%M:%S.%f")
+#        self.log.write(json.dumps({"time":ctime, "recv":rot, "real":real_joints})+"\n")
 
-        t_start = rtde_c.initPeriod()
         joint_q = [math.radians(x) for x in rot2]
-        rtde_c.servoJ(joint_q, velocity, acceleration, dt, lookahead_time, gain)
-        rtde_c.waitPeriod(t_start)
+        # このjoint 情報も Shared Memoryに保存すべし！
+        self.pose[6:] = joint_q 
+
+        t_start = self.rtde_c.initPeriod()
+        self.rtde_c.servoJ(joint_q, velocity, acceleration, dt, lookahead_time, gain)
+        self.rtde_c.waitPeriod(t_start)
 
 
     def connect_mqtt(self):
+
         self.client = mqtt.Client()  
 # MQTTの接続設定
         self.client.on_connect = self.on_connect         # 接続時のコールバック関数を登録
@@ -85,20 +126,54 @@ class UR_MQTT:
 #  client.loop_start()   # 通信処理開始
         self.client.loop_forever()   # 通信処理開始
 
+    def run_proc(self):
+        self.sm = mp.shared_memory.SharedMemory("UR5e")
+        self.pose = np.ndarray((12,), dtype=np.dtype("float32"), buffer=self.sm.buf)
+        self.init_rtde()
+        self.connect_mqtt()
 
+class ProcessManager:
+    def __init__(self):
+        mp.set_start_method('spawn')
+        sz = 32* np.dtype('float').itemsize
+        self.sm = mp.shared_memory.SharedMemory(create=True,size = sz, name='UR5e')
+        self.ar = np.ndarray((12,), dtype=np.dtype("float32"), buffer=self.sm.buf) # 共有メモリ上の Array
 
-fname = sys.argv[1]
-if fname == "":
-    fname = "lss4dof2.log"
-mq = UR_MQTT(fname)
+    def startRecvMQTT(self):
+        self.recv = UR_MQTT()
+        self.recvP = Process(target=self.recv.run_proc, args=())
+        self.recvP.start()
 
-mq.connect_mqtt()
+    def startMonitor(self):
+        self.mon = UR_monitor.UR_MON()
+        self.monP = Process(target=self.mon.run_proc, args=())
+        self.monP.start()
+
+    def checkSM(self):
+        while True:
+            print(time.time(), self.ar)
+            time.sleep(2)
+    
+                                
+
 
 # Move to initial joint position with a regular moveJ
 #rtde_c.moveJ(joint_q)
 
 # Execute 500Hz control loop for 2 seconds, each cycle is 2ms
 
-rtde_c.servoStop()
-rtde_c.stopScript()
 
+if __name__ == '__main__':
+#        
+    pm = ProcessManager()
+    try:
+        print("Monitor!")
+        pm.startMonitor()
+        print("MQTT!")
+        pm.startRecvMQTT()
+        print("Check!")
+        pm.checkSM()
+    except KeyboardInterrupt:
+        print("Stop!")
+        rtde_c.servoStop()
+        rtde_c.stopScript()
