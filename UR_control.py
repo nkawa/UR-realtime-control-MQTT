@@ -19,20 +19,21 @@ import multiprocessing.shared_memory
 import numpy as np
 
 robot_ip = "127.0.0.1"
+#robot_ip = "10.5.5.102"
+
 rtde_frequency = 500.0
 dt = 1.0/rtde_frequency  # 2ms
 flags = RTDEControl.FLAG_VERBOSE | RTDEControl.FLAG_UPLOAD_SCRIPT
 ur_cap_port = 50002
 
 # Parameters
-velocity = 0.5
-acceleration = 0.5
+velocity = 0.4
+acceleration = 0.3
 dt = 1.0/500  # 2ms
 lookahead_time = 0.1
 gain = 300
 
 rt_control_priority = 85
-
 
 class UR_CON:
     def __init__(self):
@@ -41,7 +42,7 @@ class UR_CON:
         self.average.fill(0)
 
     def init_rtde(self):
-        self.rtde_c = RTDEControl(robot_ip, rtde_frequency, flags, ur_cap_port, rt_control_priority)
+        self.rtde_c = RTDEControl(self.robot_ip, rtde_frequency, flags, ur_cap_port, rt_control_priority)
 
     def init_realtime(self):
         os_used = sys.platform
@@ -98,7 +99,9 @@ class UR_CON:
             self.rtde_c.waitPeriod(t_start)
 
 
-    def run_proc(self):
+    def run_proc(self, new_robot_ip="127.0.0.1"):
+        self.robot_ip = new_robot_ip
+
         self.sm = mp.shared_memory.SharedMemory("UR5e")
         self.pose = np.ndarray((12,), dtype=np.dtype("float32"), buffer=self.sm.buf)
 

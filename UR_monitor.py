@@ -20,7 +20,8 @@ import multiprocessing.shared_memory
 import numpy as np
 
 
-robot_ip = "127.0.0.1"
+#robot_ip = "127.0.0.1"
+#robot_ip = "10.5.5.102"
 vel = 0.5
 acc = 0.5
 rtde_frequency = 500.0
@@ -33,15 +34,14 @@ gain = 600
 
 # ur_rtde realtime priorities
 rt_receive_priority = 90
-rt_control_priority = 85
+#rt_control_priority = 85
 
 class UR_MON:
     def __init__(self,verbose=False):
         self.verbose= verbose
 
     def init_rtde(self):
-#        self.rtde_c = RTDEControl(robot_ip)
-        self.rtde_r = RTDEReceive(robot_ip, rtde_frequency, [], True, False, rt_receive_priority)
+        self.rtde_r = RTDEReceive(self.robot_ip, rtde_frequency, [], True, False, rt_receive_priority)
 
     def init_realtime(self):
         os_used = sys.platform
@@ -90,7 +90,8 @@ class UR_MON:
             self.pose[:len(actual_tcp_pose)] = actual_tcp_pose
             self.rtde_r.waitPeriod(t_start)
 
-    def run_proc(self):
+    def run_proc(self,new_robot_ip="127.0.0.1"):
+        self.robot_ip = new_robot_ip
         self.sm = mp.shared_memory.SharedMemory("UR5e")
         self.pose = np.ndarray((12,), dtype=np.dtype("float32"), buffer=self.sm.buf)
 
