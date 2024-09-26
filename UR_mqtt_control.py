@@ -17,6 +17,12 @@ import time
 import UR_monitor
 import UR_control
 
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(__file__),'.env'))
+
+MQTT_SERVER = os.getenv("MQTT_SERVER", "127.0.0.1")
+MQTT_CTRL_TOPIC = os.getenv("MQTT_CTRL_TOPIC", "urdemo/demo_ctl")
 
 #
 #  RTDE : UR-5e を動かすためのリアルタイム通信
@@ -45,9 +51,8 @@ class UR_MQTT:
  #       self.log = open(fname,"w")
 
     def on_connect(self,client, userdata, flag, rc):
-        print("Connected with result code " + str(rc))  # 接続できた旨表示
-#        self.client.subscribe("lss4dof/state") #　connected -> subscribe
-        self.client.subscribe("webxr2/joint") #　connected -> subscribe
+        print("Connected with result code " + str(rc), "subscribe ctrl", MQTT_CTRL_TOPIC)  # 接続できた旨表示
+        self.client.subscribe(MQTT_CTRL_TOPIC) #　connected -> subscribe
 
 # ブローカーが切断したときの処理
     def on_disconnect(self,client, userdata, rc):
@@ -94,7 +99,7 @@ class UR_MQTT:
         self.client.on_connect = self.on_connect         # 接続時のコールバック関数を登録
         self.client.on_disconnect = self.on_disconnect   # 切断時のコールバックを登録
         self.client.on_message = self.on_message         # メッセージ到着時のコールバック
-        self.client.connect("192.168.207.22", 1883, 60)
+        self.client.connect(MQTT_SERVER, 1883, 60)
 #  client.loop_start()   # 通信処理開始
         self.client.loop_forever()   # 通信処理開始
 
@@ -109,6 +114,7 @@ class ProcessManager:
         mp.set_start_method('spawn')
         sz = 32* np.dtype('float').itemsize
         self.sm = mp.shared_memory.SharedMemory(create=True,size = sz, name='UR5e')
+#        self.sm = mp.shared_memory.SharedMemory(size=sz, name='UR5e')
         self.ar = np.ndarray((12,), dtype=np.dtype("float32"), buffer=self.sm.buf) # 共有メモリ上の Array
 
     def startRecvMQTT(self):

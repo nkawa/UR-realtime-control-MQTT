@@ -17,8 +17,12 @@ from multiprocessing import Process, Queue
 import multiprocessing.shared_memory
 
 import numpy as np
+from dotenv import load_dotenv
 
-robot_ip = "127.0.0.1"
+load_dotenv(os.path.join(os.path.dirname(__file__),'.env'))
+
+robot_ip = os.getenv("ROBOT_IP", "127.0.0.1")
+#robot_ip = "127.0.0.1"
 #robot_ip = "10.5.5.102"
 
 rtde_frequency = 500.0
@@ -70,7 +74,7 @@ class UR_CON:
                 continue
 
             if self.pose[6:].sum() == 0:
-                time.sleep(0.3)
+                time.sleep(0.8)
                 print("Wait for target..")
                 continue 
             

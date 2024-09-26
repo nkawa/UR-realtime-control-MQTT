@@ -19,6 +19,13 @@ import multiprocessing.shared_memory
 
 import numpy as np
 
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(__file__),'.env'))
+ROBOT_IP = os.getenv("ROBOT_IP", "127.0.0.1")
+MQTT_SERVER = os.getenv("MQTT_SERVER", "127.0.0.1")
+MQTT_ROBOT_STATE_TOPIC= os.getenv("MQTT_ROBOT_STATE_TOPIC", "ur5e/state")
+
 
 #robot_ip = "127.0.0.1"
 #robot_ip = "10.5.5.102"
@@ -72,7 +79,7 @@ class UR_MON:
 # MQTTの接続設定
         self.client.on_connect = self.on_connect         # 接続時のコールバック関数を登録
         self.client.on_disconnect = self.on_disconnect   # 切断時のコールバックを登録
-        self.client.connect("192.168.207.22", 1883, 60)
+        self.client.connect(MQTT_SERVER, 1883, 60)
         self.client.loop_start()   # 通信処理開始
 #        self.client.loop_forever()   # 通信処理開始
 
@@ -81,7 +88,7 @@ class UR_MON:
             t_start = self.rtde_r.initPeriod()
 #            actual_tcp_pose = self.rtde_r.getActualTCPPose()
             actual_tcp_pose = self.rtde_r.getActualQ()
-            self.client.publish("UR5e/state", json.dumps(actual_tcp_pose))
+            self.client.publish(MQTT_ROBOT_STATE_TOPIC, json.dumps(actual_tcp_pose))
             # ここで SharedMemory を使う！
 
             if self.verbose:
@@ -90,7 +97,7 @@ class UR_MON:
             self.pose[:len(actual_tcp_pose)] = actual_tcp_pose
             self.rtde_r.waitPeriod(t_start)
 
-    def run_proc(self,new_robot_ip="127.0.0.1"):
+    def run_proc(self,new_robot_ip=ROBOT_IP):
         self.robot_ip = new_robot_ip
         self.sm = mp.shared_memory.SharedMemory("UR5e")
         self.pose = np.ndarray((12,), dtype=np.dtype("float32"), buffer=self.sm.buf)
