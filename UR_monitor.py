@@ -84,10 +84,26 @@ class UR_MON:
 #        self.client.loop_forever()   # 通信処理開始
 
     def monitor_start(self):
+        lastStatus = -1
+        lastRuntimeState = -1
         while True:
             t_start = self.rtde_r.initPeriod()
 #            actual_tcp_pose = self.rtde_r.getActualTCPPose()
             actual_tcp_pose = self.rtde_r.getActualQ()
+
+            # エラー状態を取得したい
+            robot_state = self.rtde_r.getRobotStatus()
+            if robot_state != lastStatus:
+                print("RobotStatus:",robot_state)
+                lastStatus = robot_state
+
+            runtime_state = self.rtde_r.getRobotStatus()
+            if runtime_state != lastRuntimeState:
+                print("RuntimeState:",runtime_state)
+                lastRuntimeState = runtime_state
+
+            robot_state = self.rtde_r.getRuntimeState()
+
             self.client.publish(MQTT_ROBOT_STATE_TOPIC, json.dumps(actual_tcp_pose))
             # ここで SharedMemory を使う！
 
@@ -123,6 +139,6 @@ if __name__ == '__main__':
     try:
         ur.monitor_start()
     except KeyboardInterrupt:
-        print("Stopped")
+        print("Monitor Main Stopped")
 #        rtde_c.servoStop()
 #        rtde_c.stopScript()
