@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__),'.env'))
 
-robot_ip = os.getenv("ROBOT_IP", "127.0.0.1")
+ROBOT_IP = os.getenv("ROBOT_IP", "127.0.0.1")
 #robot_ip = "127.0.0.1"
 #robot_ip = "10.5.5.102"
 
@@ -46,7 +46,15 @@ class UR_CON:
         self.average.fill(0)
 
     def init_rtde(self):
-        self.rtde_c = RTDEControl(self.robot_ip, rtde_frequency, flags, ur_cap_port, rt_control_priority)
+        print("Initializing RTDE control", self.robot_ip)
+        try:
+            self.rtde_c = RTDEControl(self.robot_ip, rtde_frequency, flags, ur_cap_port, rt_control_priority)
+        except Exception as e:
+            print("NO RTDE Control!",e)
+
+            exit(1)
+            # need to stop other processes!
+            print("No..")
 
     def init_realtime(self):
         os_used = sys.platform
@@ -103,7 +111,7 @@ class UR_CON:
             self.rtde_c.waitPeriod(t_start)
 
 
-    def run_proc(self, new_robot_ip="127.0.0.1"):
+    def run_proc(self, new_robot_ip=ROBOT_IP):
         self.robot_ip = new_robot_ip
 
         self.sm = mp.shared_memory.SharedMemory("UR5e")
