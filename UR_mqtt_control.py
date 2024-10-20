@@ -61,35 +61,38 @@ class UR_MQTT:
 
     def on_message(self,client, userdata, msg):
 #        print("Message",msg.payload)
-        js = json.loads(msg.payload)
-        try:
-            if js['a']== True:
-                 self.start = 0
-                 print("Start controlling!")
-            elif self.start < 0:
-                 #print("Waiting...for A button")
-                 return
+        if msg.topic == MQTT_CTRL_TOPIC:
+            js = json.loads(msg.payload)
+            try:
+                if js['a']== True:
+                    self.start = 0
+                    print("Start controlling!")
+                elif self.start < 0:
+                    #print("Waiting...for A button")
+                    return
 
-            if self.start > 100 and js['a']==True:
-                self.start = -1
-                return
-        except KeyError:
-            print("No abutton")
-            print(js)
+                if self.start > 100 and js['a']==True:
+                    self.start = -1
+                    return
+            except KeyError:
+                print("No abutton")
+                print(js)
 
-        self.start +=1
+            self.start +=1
 
-        rot =[js[x]  for x in joints]    
-        rot2 = [rot[0],-rot[1]-90,-rot[2],-rot[3]-90,rot[4],rot[5]]
+            rot =[js[x]  for x in joints]    
+            rot2 = [rot[0],-rot[1]-90,-rot[2],-rot[3]-90,rot[4],rot[5]]
 
 # 時刻
 #        ctime = datetime.now().strftime("%Y/%m/%d %H:%M:%S.%f")
 #        self.log.write(json.dumps({"time":ctime, "recv":rot, "real":real_joints})+"\n")
 
-        joint_q = [math.radians(x) for x in rot2]
+            joint_q = [math.radians(x) for x in rot2]
         # このjoint 情報も Shared Memoryに保存すべし！
-        self.pose[6:] = joint_q 
+            self.pose[6:] = joint_q 
         # Target 情報を保存するだけ
+        else:
+            print("not subscribe msg",msg.topic)
 
 
     def connect_mqtt(self):
