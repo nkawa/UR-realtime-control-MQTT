@@ -3,7 +3,7 @@ import json
 from paho.mqtt import client as mqtt
 import multiprocessing as mp
 import multiprocessing.shared_memory
-
+import socket
 
 from multiprocessing import Process, Queue
 
@@ -14,15 +14,25 @@ import math
 import numpy as np
 import time
 
+## ここでUUID を使いたい
+import uuid
+
 import UR_monitor
 import UR_control
 
 from dotenv import load_dotenv
+import ipget
+
 
 load_dotenv(os.path.join(os.path.dirname(__file__),'.env'))
 
 MQTT_SERVER = os.getenv("MQTT_SERVER", "127.0.0.1")
 MQTT_CTRL_TOPIC = os.getenv("MQTT_CTRL_TOPIC", "urdemo/demo_ctl")
+ROBOT_UUID = os.getenv("ROBOT_UUID","no-uuid")
+ROBOT_MODEL = os.getenv("ROBOT_MODEL","no-model")
+MQTT_MANAGE_TOPIC = os.getenv("MQTT_MANAGE_TOPIC", "/dev")
+MQTT_MANAGE_RCV_TOPIC = os.getenv("MQTT_MANAGE_RCV_TOPIC", "/devctl")+"/"+ROBOT_UUID
+MQTT_VACUUM_TOPIC =os.getenv("MQTT_VACUUM_TOPIC", "/vacuum")
 
 #
 #  RTDE : UR-5e を動かすためのリアルタイム通信
@@ -45,14 +55,44 @@ MQTT_CTRL_TOPIC = os.getenv("MQTT_CTRL_TOPIC", "urdemo/demo_ctl")
 
 joints=['j1','j2','j3','j4','j5','j6']
 
+def get_ip_list():
+    ll = ipget.ipget()
+    flag = False
+    ips = []
+    for p in ll.list:
+        if flag:
+            flag=False
+            if p == "127.0.0.1/8":
+                continue
+            ips.append(p)
+        if p == "inet":
+            flag = True
+    return ips
+
 class UR_MQTT:
     def __init__(self):
         self.start = -1
  #       self.log = open(fname,"w")
 
     def on_connect(self,client, userdata, flag, rc):
-        print("Connected with result code " + str(rc), "subscribe ctrl", MQTT_CTRL_TOPIC)  # 接続できた旨表示
+        print("MQTT:Connected with result code " + str(rc), "subscribe ctrl", MQTT_CTRL_TOPIC)  # 接続できた旨表示
         self.client.subscribe(MQTT_CTRL_TOPIC) #　connected -> subscribe
+
+        # ここで、MyID Register すべき
+        my_info = {
+            "robot_model": ROBOT_MODEL,
+            "IP": get_ip_list(),
+            "ID":ROBOT_UUID 
+        }
+        self.client.publish(MQTT_MANAGE_TOPIC+"/register", json.dumps(my_info))
+        print("Publish",json.dumps(my_info))
+        self.client.publish(MQTT_MANAGE_TOPIC+"/"+ROBOT_UUID, json.dumps({"date": str(datetime.today())}))
+
+        self.client.subscribe(MQTT_MANAGE_RCV_TOPIC) #　connected -> subscribe
+        self.client.subscribe(MQTT_VACUUM_TOPIC) #　connected -> subscribe
+        
+
+
 
 # ブローカーが切断したときの処理
     def on_disconnect(self,client, userdata, rc):
