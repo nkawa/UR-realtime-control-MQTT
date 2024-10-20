@@ -73,23 +73,24 @@ class UR_CON:
 
     def main_loop(self):
         count=0
+        print("[CNT]Start Main Loop")
         while self.loop:
 
             # 現在情報を取得しているかを確認
             if self.pose[0:6].sum() == 0:
                 time.sleep(0.3)
-                print("Wait for monitoring..")
+                print("[CNT]Wait for monitoring..")
                 continue
 
             if self.pose[6:].sum() == 0:
                 time.sleep(0.8)
-                print("Wait for target..")
+                print("[CNT]Wait for target..")
                 continue 
             
             now = time.time()
             if self.last == 0:
                 self.last = now
-                print("Starting to Control!",self.pose)
+                print("[CNT]Starting to Control!",self.pose)
                 continue
             
             diff = self.pose[:6]-self.pose[6:]
@@ -119,12 +120,14 @@ class UR_CON:
 
         self.loop = True
         self.init_realtime()
+        print("[CNT]:start realtime")
         self.init_rtde()
+        print("[CNT]:init RTDE")
 
         try:
             self.main_loop()
         except KeyboardInterrupt:
-            print("RTDE StopServo/Script")
+            print("[CNT]RTDE StopServo/Script")
             self.rtde_c.servoStop()
             self.rtde_c.stopScript()
 

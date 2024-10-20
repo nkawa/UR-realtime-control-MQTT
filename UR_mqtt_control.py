@@ -108,7 +108,7 @@ class UR_MQTT:
                     self.start = 0
                     print("Start controlling!")
                 elif self.start < 0:
-                    #print("Waiting...for A button")
+                    print("Waiting...for A button")
                     return
 
                 if self.start > 100 and js['a']==True:
@@ -121,7 +121,7 @@ class UR_MQTT:
             self.start +=1
 
             rot =[js[x]  for x in joints]    
-            rot2 = [rot[0],-rot[1]-90,-rot[2],-rot[3]-90,rot[4],rot[5]]
+            rot2 = [rot[0]+90,-rot[1]-90,-rot[2],-rot[3]-90,rot[4],rot[5]]
 
 # 時刻
 #        ctime = datetime.now().strftime("%Y/%m/%d %H:%M:%S.%f")
