@@ -86,7 +86,11 @@ class UR_MON:
     def monitor_start(self):
         lastStatus = -1
         lastRuntimeState = -1
+        last = 0
         while True:
+            now = time.time()
+            if last == 0:
+                last = now
             t_start = self.rtde_r.initPeriod()
 #            actual_tcp_pose = self.rtde_r.getActualTCPPose()
             actual_tcp_pose = self.rtde_r.getActualQ()
@@ -104,14 +108,21 @@ class UR_MON:
 
             robot_state = self.rtde_r.getRuntimeState()
 
-            self.client.publish(MQTT_ROBOT_STATE_TOPIC, json.dumps(actual_tcp_pose))
+            if now-last > 0.3:
+                self.client.publish(MQTT_ROBOT_STATE_TOPIC, json.dumps(actual_tcp_pose))
+                last = now
+            else:
+                print("Now-last:",now, last, now-last)
             # ここで SharedMemory を使う！
 
             if self.verbose:
                 n = time.time()
                 print(n,actual_tcp_pose)
             self.pose[:len(actual_tcp_pose)] = actual_tcp_pose
+#            print("Sleep.. ",t_start)
             self.rtde_r.waitPeriod(t_start)
+            time.sleep(0.300)
+
 
     def run_proc(self,new_robot_ip=ROBOT_IP):
         self.robot_ip = new_robot_ip
