@@ -24,6 +24,8 @@ from dotenv import load_dotenv
 import ipget
 
 
+
+
 load_dotenv(os.path.join(os.path.dirname(__file__),'.env'))
 
 MQTT_SERVER = os.getenv("MQTT_SERVER", "127.0.0.1")
@@ -72,6 +74,8 @@ def get_ip_list():
 class UR_MQTT:
     def __init__(self):
         self.start = -1
+        self.gripState = False
+        self.robot_ip = "10.5.5.102"
  #       self.log = open(fname,"w")
 
     def on_connect(self,client, userdata, flag, rc):
@@ -123,13 +127,25 @@ class UR_MQTT:
             rot =[js[x]  for x in joints]    
             rot2 = [rot[0]+90,-rot[1]-90,-rot[2],-rot[3]-90,rot[4],rot[5]]
 
+            # now work with ePick!
+            if js['grip'] == True:
+                if self.gripState == False:
+                    self.gripState = True
+                    self.pose[13]=1
+
+            else:
+                if self.gripState == True:
+                    self.pose[13]=2
+                self.gripState = False
+
+
 # 時刻
 #        ctime = datetime.now().strftime("%Y/%m/%d %H:%M:%S.%f")
 #        self.log.write(json.dumps({"time":ctime, "recv":rot, "real":real_joints})+"\n")
 
             joint_q = [math.radians(x) for x in rot2]
         # このjoint 情報も Shared Memoryに保存すべし！
-            self.pose[6:] = joint_q 
+            self.pose[6:12] = joint_q 
         # Target 情報を保存するだけ
         else:
             print("not subscribe msg",msg.topic)
@@ -148,7 +164,7 @@ class UR_MQTT:
 
     def run_proc(self):
         self.sm = mp.shared_memory.SharedMemory("UR5e")
-        self.pose = np.ndarray((12,), dtype=np.dtype("float32"), buffer=self.sm.buf)
+        self.pose = np.ndarray((16,), dtype=np.dtype("float32"), buffer=self.sm.buf)
 
         self.connect_mqtt()
 

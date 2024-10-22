@@ -19,6 +19,10 @@ import multiprocessing.shared_memory
 import numpy as np
 from dotenv import load_dotenv
 
+import threading
+
+from vacuumScripts import Vacuum_grip, Vacuum_release
+
 load_dotenv(os.path.join(os.path.dirname(__file__),'.env'))
 
 ROBOT_IP = os.getenv("ROBOT_IP", "127.0.0.1")
@@ -56,6 +60,22 @@ class UR_CON:
             # need to stop other processes!
             print("No..")
 
+    def send_grip(self):
+        self.rtde_c.sendCustomScript(Vacuum_grip)
+
+    def send_release(self):
+        self.rtde_c.sendCustomScript(Vacuum_release)
+
+    def stop_script(self):
+        st = self.rtde_c.getRobotStatus()
+        print("[CNT] RobotState0:",st)
+        time.sleep(1)
+        self.rtde_c.stopScript()
+        st = self.rtde_c.getRobotStatus()
+        print("[CNT] RobotState1:",st)
+        self.rtde_c.reuploadScript()
+
+
     def init_realtime(self):
         os_used = sys.platform
         process = psutil.Process(os.getpid())
@@ -82,7 +102,7 @@ class UR_CON:
                 print("[CNT]Wait for monitoring..")
                 continue
 
-            if self.pose[6:].sum() == 0:
+            if self.pose[6:12].sum() == 0:
                 time.sleep(0.8)
                 print("[CNT]Wait for target..")
                 continue 
@@ -93,7 +113,7 @@ class UR_CON:
                 print("[CNT]Starting to Control!",self.pose)
                 continue
             
-            diff = self.pose[:6]-self.pose[6:]
+            diff = self.pose[:6]-self.pose[6:12]
             td = now - self.last
 #            self.average[:]=np.roll(self.average,shift=1)
 #            self.average[0]=td*10000
@@ -105,10 +125,26 @@ class UR_CON:
             ## ここで平滑化したい！
             spd = diff/td
             self.last = now
-            joint_q = self.pose[6:].tolist()  #これだと生の値
+            joint_q = self.pose[6:12].tolist()  #これだと生の値
+
+            if self.pose[13]==1:#
+                th1 = threading.Thread(target=self.send_grip)
+                th1.start()
+                self.pose[13]=0
+                th3 = threading.Thread(target=self.stop_script)
+                th3.start()
+
+            if self.pose[13]==2:#
+                th2 = threading.Thread(target=self.send_release)
+                th2.start()
+                self.pose[13]=0
+                th3 = threading.Thread(target=self.stop_script)
+                th3.start()
+
 
             t_start = self.rtde_c.initPeriod()
-            self.rtde_c.servoJ(joint_q, velocity, acceleration, dt, lookahead_time, gain)
+            res = self.rtde_c.servoJ(joint_q, velocity, acceleration, dt, lookahead_time, gain)
+#            print("[CNT]ServoJ:",res)
             self.rtde_c.waitPeriod(t_start)
 
 
@@ -116,7 +152,7 @@ class UR_CON:
         self.robot_ip = new_robot_ip
 
         self.sm = mp.shared_memory.SharedMemory("UR5e")
-        self.pose = np.ndarray((12,), dtype=np.dtype("float32"), buffer=self.sm.buf)
+        self.pose = np.ndarray((16,), dtype=np.dtype("float32"), buffer=self.sm.buf)
 
         self.loop = True
         self.init_realtime()

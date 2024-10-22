@@ -127,7 +127,7 @@ class UR_MON:
     def run_proc(self,new_robot_ip=ROBOT_IP):
         self.robot_ip = new_robot_ip
         self.sm = mp.shared_memory.SharedMemory("UR5e")
-        self.pose = np.ndarray((12,), dtype=np.dtype("float32"), buffer=self.sm.buf)
+        self.pose = np.ndarray((16,), dtype=np.dtype("float32"), buffer=self.sm.buf)
 
         self.init_realtime()
         self.init_rtde()
