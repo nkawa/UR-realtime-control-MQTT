@@ -32,8 +32,8 @@ MQTT_SERVER = os.getenv("MQTT_SERVER", "127.0.0.1")
 MQTT_CTRL_TOPIC = os.getenv("MQTT_CTRL_TOPIC", "urdemo/demo_ctl")
 ROBOT_UUID = os.getenv("ROBOT_UUID","no-uuid")
 ROBOT_MODEL = os.getenv("ROBOT_MODEL","no-model")
-MQTT_MANAGE_TOPIC = os.getenv("MQTT_MANAGE_TOPIC", "/dev")
-MQTT_MANAGE_RCV_TOPIC = os.getenv("MQTT_MANAGE_RCV_TOPIC", "/devctl")+"/"+ROBOT_UUID
+MQTT_MANAGE_TOPIC = os.getenv("MQTT_MANAGE_TOPIC", "dev")
+MQTT_MANAGE_RCV_TOPIC = os.getenv("MQTT_MANAGE_RCV_TOPIC", "dev")+"/"+ROBOT_UUID
 MQTT_VACUUM_TOPIC =os.getenv("MQTT_VACUUM_TOPIC", "/vacuum")
 
 #
@@ -172,7 +172,10 @@ class ProcessManager:
     def __init__(self):
         mp.set_start_method('spawn')
         sz = 32* np.dtype('float').itemsize
-        self.sm = mp.shared_memory.SharedMemory(create=True,size = sz, name='UR5e')
+        try:
+            self.sm = mp.shared_memory.SharedMemory(create=True,size = sz, name='UR5e')
+        except FileExistsError:
+            self.sm = mp.shared_memory.SharedMemory(size = sz, name='UR5e')
 #        self.sm = mp.shared_memory.SharedMemory(size=sz, name='UR5e')
         self.ar = np.ndarray((12,), dtype=np.dtype("float32"), buffer=self.sm.buf) # 共有メモリ上の Array
 
@@ -216,5 +219,7 @@ if __name__ == '__main__':
         pm.checkSM()
     except KeyboardInterrupt:
         print("Stop!")
+        self.sm.close()
+        self.sm.unlink()
         #rtde_c.servoStop()
         #rtde_c.stopScript()
